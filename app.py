@@ -118,9 +118,14 @@ with st.sidebar:
         try:  # add classification columns to the uploaded dataframe (UoM kept as a display column)
             st.session_state["df_classified"], st.session_state["class_summary"] = it.attach_classification(
                 st.session_state["df"])
+            st.session_state["dropped_rows"] = it.find_dropped_rows(st.session_state["df"])
         except Exception as e:
             st.session_state["df_classified"] = st.session_state["class_summary"] = None
+            st.session_state["dropped_rows"] = None
             st.error(f"Could not classify this file: {e}")
+        if st.session_state.get("dropped_rows") is not None and len(st.session_state["dropped_rows"]):
+            st.warning(f"{len(st.session_state['dropped_rows'])} row(s) excluded from classification "
+                       "(Sales or Hits not a number). See the Inventory Classification tab.")
 
 tab_agent, tab_class = st.tabs(["Ask the Agent", "Inventory Classification"])
 
@@ -154,6 +159,12 @@ with tab_class:
         st.warning("The uploaded file could not be classified. Check that it has Item Number, Sales ($) and Hits columns.")
     else:
         detail, summary = st.session_state["df_classified"], st.session_state["class_summary"]
+        dropped = st.session_state.get("dropped_rows")
+        if dropped is not None and len(dropped):
+            st.warning(f"{len(dropped)} row(s) could not be classified because Sales ($) or Hits is not a number, "
+                       f"so they are excluded from every count and total below ({len(st.session_state['df'])} rows "
+                       f"uploaded, {len(detail)} classified).")
+            st.dataframe(dropped, hide_index=True, width="stretch")
         st.markdown("**Inputs used**")
         st.table(pd.DataFrame({"Input": ["Items classified", "Criteria columns", "Weights", "Cumulative % cutoffs",
                                          "Scores", "Final class cutoffs", "Total Sales ($)", "Total Hits"],

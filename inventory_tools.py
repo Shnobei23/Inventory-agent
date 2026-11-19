@@ -197,6 +197,25 @@ def _final_class(score):
     return "D"
 
 
+def _to_number(series):
+    """Strip $, commas and spaces, then convert to numeric (unreadable values become NaN)."""
+    return pd.to_numeric(series.astype(str).str.replace(r"[$,\s]", "", regex=True), errors="coerce")
+
+
+def find_dropped_rows(df, sales_col="Sales ($)", hits_col="Hits"):
+    """Rows classify_inventory will drop because Sales or Hits cannot be read as a number
+    (same cleaning as classify_inventory). Returns the original rows plus a 'Reason' column."""
+    out = df.copy()
+    out.columns = [c.strip() for c in out.columns]
+    bad_sales, bad_hits = _to_number(out[sales_col]).isna(), _to_number(out[hits_col]).isna()
+    dropped = out[bad_sales | bad_hits].copy()
+    dropped["Reason"] = [
+        " and ".join(n for n, b in ((sales_col, s), (hits_col, h)) if b) + " not a number"
+        for s, h in zip(bad_sales[bad_sales | bad_hits], bad_hits[bad_sales | bad_hits])]
+    dropped.insert(0, "CSV Row", dropped.index + 2)  # +2: header is line 1, data starts at line 2
+    return dropped
+
+
 def classify_inventory(df, sales_col="Sales ($)", hits_col="Hits"):
     """BAN 517 multicriteria method: separate Pareto classes on Sales and Hits (cumulative % of each
     criterion's total, unrounded; A<=60, B<=80, C<=90, D>90), scores A4 B3 C2 D1,
@@ -204,7 +223,7 @@ def classify_inventory(df, sales_col="Sales ($)", hits_col="Hits"):
     out = df.copy()
     out.columns = [c.strip() for c in out.columns]
     for col in (sales_col, hits_col):
-        out[col] = pd.to_numeric(out[col].astype(str).str.replace(r"[$,\s]", "", regex=True), errors="coerce")
+        out[col] = _to_number(out[col])
     out = out.dropna(subset=[sales_col, hits_col])
     for col, tag in ((sales_col, "Sales"), (hits_col, "Hits")):
         order = out[col].sort_values(ascending=False, kind="mergesort").index
