@@ -115,6 +115,12 @@ with st.sidebar:
     if up is not None:
         st.session_state["df"] = pd.read_csv(up, encoding="utf-8")
         st.success(f"Loaded {len(st.session_state['df'])} rows")
+        try:  # add classification columns to the uploaded dataframe (UoM kept as a display column)
+            st.session_state["df_classified"], st.session_state["class_summary"] = it.attach_classification(
+                st.session_state["df"])
+        except Exception as e:
+            st.session_state["df_classified"] = st.session_state["class_summary"] = None
+            st.error(f"Could not classify this file: {e}")
 
 tab_agent, tab_class = st.tabs(["Ask the Agent", "Inventory Classification"])
 
@@ -144,8 +150,20 @@ with tab_class:
                 "Final class: A >= 3.25, B >= 2.50, C >= 1.75, D < 1.75.")
     if st.session_state.get("df") is None:
         st.info("Upload the inventory CSV in the sidebar.")
+    elif st.session_state.get("df_classified") is None:
+        st.warning("The uploaded file could not be classified. Check that it has Item Number, Sales ($) and Hits columns.")
     else:
-        detail, summary = it.classify_inventory(st.session_state["df"])
+        detail, summary = st.session_state["df_classified"], st.session_state["class_summary"]
+        st.markdown("**Inputs used**")
+        st.table(pd.DataFrame({"Input": ["Items classified", "Criteria columns", "Weights", "Cumulative % cutoffs",
+                                         "Scores", "Final class cutoffs", "Total Sales ($)", "Total Hits"],
+                               "Value": [f"{len(detail):,} items (key: Item Number)",
+                                         "Sales ($) and Hits, each ranked independently, descending",
+                                         "Sales 65%, Hits 35%", "A <= 60%, B <= 80%, C <= 90%, D > 90%",
+                                         "A = 4, B = 3, C = 2, D = 1",
+                                         "Combined Score: A >= 3.25, B >= 2.50, C >= 1.75, D < 1.75",
+                                         f"${detail['Sales ($)'].sum():,.2f}", f"{detail['Hits'].sum():,.0f}"]}
+                              ).set_index("Input"))
         st.markdown("**Classification summary**")
         st.dataframe(summary.style.format({"Number of Items": "{:,.0f}", "Total Sales ($)": "${:,.2f}",
                                            "% of Total Sales": "{:.2f}%"}), width="stretch")

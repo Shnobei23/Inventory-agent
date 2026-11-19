@@ -227,3 +227,20 @@ def classify_inventory(df, sales_col="Sales ($)", hits_col="Hits"):
     summary = pd.concat([summary, total])
     summary.index.name = "Final Class"
     return out.reset_index(drop=True), summary
+
+
+def attach_classification(df, uom_col="UoM"):
+    """Add the classification columns to the uploaded dataframe, joined on Item Number (the unique key,
+    never Item Name). UoM is carried along as a display-only column. Calls classify_inventory unchanged,
+    so no formula or class result differs. Returns (enriched dataframe, summary table)."""
+    detail, summary = classify_inventory(df)
+    base = df.copy()
+    base.columns = [c.strip() for c in base.columns]
+    if base["Item Number"].duplicated().any():
+        raise ValueError("Item Number must be unique to attach classification results.")
+    if uom_col in base.columns:
+        detail = detail.merge(base[["Item Number", uom_col]], on="Item Number", how="left", validate="one_to_one")
+        cols = list(detail.columns)
+        cols.insert(cols.index("Item Name") + 1 if "Item Name" in cols else 1, cols.pop(cols.index(uom_col)))
+        detail = detail[cols]
+    return detail, summary
